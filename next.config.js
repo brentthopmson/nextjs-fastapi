@@ -25,6 +25,9 @@ const nextConfig = {
       },
     ];
   },
+  images: {
+    domains: ['cdn.debounce.io'], // Add the domain(s) here
+  },
 };
 
 module.exports = nextConfig;
