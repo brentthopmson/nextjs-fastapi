@@ -1,6 +1,19 @@
-import Link from "next/link";
+// Add this at the top of your file
+"use client";
+
+import { useState } from 'react';
+import Link from 'next/link';
 
 export default function Debounce() {
+  const [resultVisible, setResultVisible] = useState(false);
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    // Here you would normally handle the form submission
+    // For demonstration purposes, we'll just show the result box
+    setResultVisible(true);
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24 text-center">
       <div className="w-full max-w-md mx-auto">
@@ -16,10 +29,8 @@ export default function Debounce() {
           We also retrieve a photo associated with the provided email address if possible.
         </p>
         <form
-          action="#"
           className="form-box width-80"
-          method="post"
-          onSubmit="showHint()"
+          onSubmit={handleSubmit}
         >
           <input
             id="words"
@@ -37,27 +48,29 @@ export default function Debounce() {
             Validate
           </button>
         </form>
-        <div
-          id="demo-result-box"
-          className="mt-8 p-4 border rounded"
-        >
-          <img
-            className="mb-4 rounded-full w-16 h-16 mx-auto"
-            src="https://cdn.debounce.io/j3qPRRUBgdrRz9TyNyyZh2ilfAB-EztFQY_Y0g5w_hQIWMVUVrthdj9wafNrQyzByt018SDcJtw8B1hHh4A_bgpNrLKvwlG94NaTjG8nL9YhOO3fP0T8cpr_uEjWCaAC"
-            alt="Result"
-          />
-          <p>The email address is <span className="text-blue-500">Safe to Send</span> because it's <span className="text-blue-500">Deliverable</span>.</p>
-          <hr className="my-4 border-dashed" />
-          <div className="text-left">
-            <p><strong>DELIVERABLE</strong></p>
-            <p>Free Email: true</p>
-            <p>Role: false</p>
-            <p>Syntax Error: false</p>
-            <p>Spam-trap: false</p>
-            <p>Disposable: false</p>
-            <p>Accept-all: false</p>
+        {resultVisible && (
+          <div
+            id="demo-result-box"
+            className="mt-8 p-4 border rounded"
+          >
+            <img
+              className="mb-4 rounded-full w-16 h-16 mx-auto"
+              src="https://cdn.debounce.io/j3qPRRUBgdrRz9TyNyyZh2ilfAB-EztFQY_Y0g5w_hQIWMVUVrthdj9wafNrQyzByt018SDcJtw8B1hHh4A_bgpNrLKvwlG94NaTjG8nL9YhOO3fP0T8cpr_uEjWCaAC"
+              alt="Result"
+            />
+            <p>The email address is <span className="text-blue-500">Safe to Send</span> because it's <span className="text-blue-500">Deliverable</span>.</p>
+            <hr className="my-4 border-dashed" />
+            <div className="text-left">
+              <p><strong>DELIVERABLE</strong></p>
+              <p>Free Email: true</p>
+              <p>Role: false</p>
+              <p>Syntax Error: false</p>
+              <p>Spam-trap: false</p>
+              <p>Disposable: false</p>
+              <p>Accept-all: false</p>
+            </div>
           </div>
-        </div>
+        )}
         <p className="mt-8">
           Convinced? <a href="https://app.debounce.io/register" className="text-blue-500 underline">Register now</a>, get 100 free credits and the full detailed report.
         </p>
