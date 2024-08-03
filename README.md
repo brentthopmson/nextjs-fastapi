@@ -76,3 +76,28 @@ To learn more about Next.js, take a look at the following resources:
 - [FastAPI Documentation](https://fastapi.tiangolo.com/) - learn about FastAPI features and API.
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+
+
+
+
+Full Steps to Run
+Activate the virtual environment:
+
+bash
+Copy code
+.venv\Scripts\activate
+Update pip:
+
+bash
+Copy code
+python -m pip install --upgrade pip
+Install dependencies:
+
+bash
+Copy code
+pip install -r requirements.txt
+Run the application:
+
+bash
+Copy code
+uvicorn api.index:app --reload
