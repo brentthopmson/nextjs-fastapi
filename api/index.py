@@ -5,6 +5,7 @@ import dns.resolver
 import smtplib
 import time
 import logging
+import ssl
 
 # Initialize the FastAPI app
 app = FastAPI()
@@ -89,18 +90,28 @@ def verify_email(email: EmailStr = Query(..., description="The email address to 
             disposable=is_disposable_email(domain)
         )
 
-    # Try to connect to the mail server with retries
+    # Try to connect to the mail server with retries and alternative ports
     mail_server = str(mx_records[0].exchange)
     retries = 3
     timeout = 20  # Increased timeout
+    smtp_ports = [587, 465]  # Common ports for SMTP submission
 
-    for attempt in range(retries):
-        try:
-            logger.info(f"Attempting to connect to mail server {mail_server}, attempt {attempt + 1}")
-            with smtplib.SMTP(mail_server, timeout=timeout) as server:
-                server.helo()
-                server.mail('test@example.com')
-                code, message = server.rcpt(email)
+    for port in smtp_ports:
+        for attempt in range(retries):
+            try:
+                logger.info(f"Attempting to connect to mail server {mail_server} on port {port}, attempt {attempt + 1}")
+                if port == 587:
+                    with smtplib.SMTP(mail_server, port, timeout=timeout) as server:
+                        server.starttls()
+                        server.helo()
+                        server.mail('test@example.com')
+                        code, message = server.rcpt(email)
+                elif port == 465:
+                    with smtplib.SMTP_SSL(mail_server, port, timeout=timeout) as server:
+                        server.helo()
+                        server.mail('test@example.com')
+                        code, message = server.rcpt(email)
+                
                 if code == 250:
                     logger.info(f"Email {email} is deliverable")
                     return VerifyEmailResponse(
@@ -121,28 +132,29 @@ def verify_email(email: EmailStr = Query(..., description="The email address to 
                         reason="Email is undeliverable",
                         disposable=is_disposable_email(domain)
                     )
-        except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, smtplib.SMTPException) as e:
-            logger.error(f"Error connecting to mail server {mail_server}: {e}")
-            if attempt == retries - 1:
-                return VerifyEmailResponse(
-                    email=email,
-                    user=user,
-                    domain=domain,
-                    status="unknown",
-                    reason=str(e),
-                    disposable=is_disposable_email(domain)
-                )
-            time.sleep(2)  # Wait before retrying
-        except TimeoutError as e:
-            logger.error(f"Connection to mail server {mail_server} timed out: {e}")
-            return VerifyEmailResponse(
-                email=email,
-                user=user,
-                domain=domain,
-                status="unknown",
-                reason="timed out",
-                disposable=is_disposable_email(domain)
-            )
+            except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, smtplib.SMTPException) as e:
+                logger.error(f"Error connecting to mail server {mail_server} on port {port}: {e}")
+                if attempt == retries - 1:
+                    return VerifyEmailResponse(
+                        email=email,
+                        user=user,
+                        domain=domain,
+                        status="unknown",
+                        reason=str(e),
+                        disposable=is_disposable_email(domain)
+                    )
+                time.sleep(2)  # Wait before retrying
+            except TimeoutError as e:
+                logger.error(f"Connection to mail server {mail_server} on port {port} timed out: {e}")
+                if attempt == retries - 1:
+                    return VerifyEmailResponse(
+                        email=email,
+                        user=user,
+                        domain=domain,
+                        status="unknown",
+                        reason="timed out",
+                        disposable=is_disposable_email(domain)
+                    )
 
 @app.post("/api/send-email")
 def send_email(request: SendEmailRequest):
