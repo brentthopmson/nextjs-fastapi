@@ -55,7 +55,7 @@ def is_disposable_email(domain: str) -> bool:
     disposable_domains = ["mailinator.com", "trashmail.com", "tempmail.com"]  # Add more disposable domains here
     return domain in disposable_domains
 
-@app.get("/api/verify-email", response_model=VerifyEmailResponse)
+@app.get("/api/verify-email-v2", response_model=VerifyEmailResponse)
 def verify_email(email: EmailStr = Query(..., description="The email address to verify")):
     logger.info(f"Starting verification for email: {email}")
     user, domain = email.split('@')
