@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel, EmailStr
 import re
-import dns.resolver
 import requests
 import logging
 
@@ -75,9 +74,13 @@ def verify_email(email: EmailStr = Query(..., description="The email address to 
 
     # Check if the domain has MX records
     try:
-        mx_records = dns.resolver.resolve(domain, 'MX')
+        mx_records = requests.get(f"https://dns.google/resolve?name={domain}&type=MX").json()
+        logger.info(f"MX records response: {mx_records}")
+        if 'Answer' not in mx_records:
+            raise Exception("No MX records found")
+        mx_records = [record['data'] for record in mx_records['Answer']]
         logger.info(f"MX records found for domain {domain}: {mx_records}")
-    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN) as e:
+    except Exception as e:
         logger.error(f"No MX records for domain {domain}: {e}")
         return VerifyEmailResponse(
             email=email,
@@ -89,7 +92,7 @@ def verify_email(email: EmailStr = Query(..., description="The email address to 
         )
 
     # Extract the mail server and identify the platform
-    mail_server = str(mx_records[0].exchange)
+    mail_server = mx_records[0].split()[-1]
     if 'outlook' in mail_server:
         platform = 'outlook'
     elif 'google' in mail_server or 'gmail' in mail_server:
