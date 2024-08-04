@@ -60,18 +60,6 @@ def verify_email(email: EmailStr = Query(..., description="The email address to 
     logger.info(f"Starting verification for email: {email}")
     user, domain = email.split('@')
 
-    # Check if the email format is valid
-    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-        logger.warning(f"Invalid email format: {email}")
-        return VerifyEmailResponse(
-            email=email,
-            user=user,
-            domain=domain,
-            status="invalid",
-            reason="Invalid email format",
-            disposable=False
-        )
-
     # Call the external API to verify the email
     api_url = f"https://headless-webfix.vercel.app/verify-email?email={email}"
     try:
