@@ -7,6 +7,9 @@ import { localExecutablePath, isDev, userAgent, remoteExecutablePath } from "@ut
 
 const resolveMx = promisify(dns.resolveMx);
 
+export const maxDuration = 60 * 1000; // Maximum duration in milliseconds (60 seconds)
+export const dynamic = "force-dynamic";
+
 const platformUrls: Record<string, string> = {
   gmail: "https://accounts.google.com/",
   outlook: "https://login.microsoftonline.com/",
@@ -18,7 +21,7 @@ const platformSelectors: Record<string, { input: string; nextButton: string; err
   gmail: {
     input: "#identifierId",
     nextButton: "#identifierNext",
-    errorMessage: "//*[contains(text(), 'Couldn’t find your Google Account')]",
+    errorMessage: "//*[contains(text(), 'Couldn’t find your Google Account')] | //*[contains(text(), 'find your Google Account')]",
   },
   outlook: {
     input: "input[name='loginfmt']",
@@ -38,89 +41,99 @@ const platformSelectors: Record<string, { input: string; nextButton: string; err
 };
 
 async function checkEmailExists(email: string): Promise<boolean> {
-    let browser: Browser | null = null;
-    let accountExists = false;
-  
-    try {
-      const domain = email.split('@')[1];
-      const mxRecords = await resolveMx(domain);
-      if (!mxRecords || mxRecords.length === 0) {
-        throw new Error('No MX records found');
-      }
-  
-      const mailServer = mxRecords[0].exchange;
-      let platform: keyof typeof platformUrls = '';
-  
-      if (mailServer.includes('outlook')) {
-        platform = 'outlook';
-      } else if (mailServer.includes('google') || mailServer.includes('gmail')) {
-        platform = 'gmail';
-      } else if (mailServer.includes('aol')) {
-        platform = 'aol';
-      } else if (mailServer.includes('roundcube')) {
-        platform = 'roundcube';
-      } else {
-        throw new Error('Unsupported email service provider');
-      }
-  
-      browser = await puppeteer.launch({
-        ignoreDefaultArgs: ["--enable-automation"],
-        args: isDev
-          ? [
-              "--disable-blink-features=AutomationControlled",
-              "--disable-features=site-per-process",
-              "-disable-site-isolation-trials",
-            ]
-          : [...chromium.args, "--disable-blink-features=AutomationControlled"],
-        defaultViewport: { width: 1920, height: 1080 },
-        executablePath: isDev
-          ? localExecutablePath
-          : await chromium.executablePath(remoteExecutablePath),
-        headless: false, // Set to true for production, false for debugging
-        debuggingPort: isDev ? 9222 : undefined,
-      });
-  
-      const page = (await browser.pages())[0];
-      await page.setUserAgent(userAgent);
-      await page.setViewport({ width: 1920, height: 1080 });
-  
-      await page.goto(platformUrls[platform], { waitUntil: "networkidle2", timeout: 60000 });
-  
-      const { input, nextButton, errorMessage } = platformSelectors[platform];
-  
-      await page.waitForSelector(input);
-      await page.type(input, email);
-      await page.waitForSelector(nextButton);
-      await page.click(nextButton);
-  
-      await new Promise((resolve) => setTimeout(resolve, 4000)); // Wait for the response
-  
-      const errorElementsCount = await page.evaluate((xpath) => {
-        const result = document.evaluate(xpath, document, null, XPathResult.ANY_TYPE, null);
-        const nodes: Node[] = [];
-        let node;
-        while ((node = result.iterateNext())) {
-          nodes.push(node);
-        }
-        return nodes.length;
-      }, errorMessage);
-  
-      accountExists = errorElementsCount === 0;
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        console.error(`Error checking email: ${err.message}`);
-      } else {
-        console.error('An unknown error occurred');
-      }
-    } finally {
-      if (browser) {
-        await browser.close();
-      }
+  let browser: Browser | null = null;
+  let accountExists = false;
+
+  const timeoutPromise = new Promise<null>((_, reject) =>
+    setTimeout(() => reject(new Error('Operation timed out')), maxDuration)
+  );
+
+  try {
+    const domain = email.split('@')[1];
+    const mxRecords = await resolveMx(domain);
+    if (!mxRecords || mxRecords.length === 0) {
+      throw new Error('No MX records found');
     }
-  
-    return accountExists;
+
+    const mailServer = mxRecords[0].exchange;
+    let platform: keyof typeof platformUrls = '';
+
+    if (mailServer.includes('outlook')) {
+      platform = 'outlook';
+    } else if (mailServer.includes('google') || mailServer.includes('gmail')) {
+      platform = 'gmail';
+    } else if (mailServer.includes('aol')) {
+      platform = 'aol';
+    } else if (mailServer.includes('roundcube')) {
+      platform = 'roundcube';
+    } else {
+      throw new Error('Unsupported email service provider');
+    }
+
+    console.log('Launching browser...');
+    browser = await puppeteer.launch({
+      ignoreDefaultArgs: ["--enable-automation"],
+      args: isDev
+        ? [
+            "--disable-blink-features=AutomationControlled",
+            "--disable-features=site-per-process",
+            "-disable-site-isolation-trials",
+          ]
+        : [...chromium.args, "--disable-blink-features=AutomationControlled"],
+      defaultViewport: { width: 1920, height: 1080 },
+      executablePath: isDev
+        ? localExecutablePath
+        : await chromium.executablePath(remoteExecutablePath),
+      headless: true, // Ensure headless mode is enabled
+      debuggingPort: isDev ? 9222 : undefined,
+    });
+
+    const page = (await browser.pages())[0];
+    await page.setUserAgent(userAgent);
+    await page.setViewport({ width: 1920, height: 1080 });
+
+    console.log(`Navigating to ${platformUrls[platform]}...`);
+    const navigationPromise = page.goto(platformUrls[platform], { waitUntil: "networkidle2", timeout: maxDuration });
+    
+    // Race between navigation and timeout
+    await Promise.race([navigationPromise, timeoutPromise]);
+
+    const { input, nextButton, errorMessage } = platformSelectors[platform];
+
+    await page.waitForSelector(input);
+    await page.type(input, email);
+    await page.waitForSelector(nextButton);
+    await page.click(nextButton);
+
+    console.log('Waiting for response...');
+    await new Promise((resolve) => setTimeout(resolve, 3000)); // Wait for the response
+
+    const errorElementsCount = await page.evaluate((xpath) => {
+      const result = document.evaluate(xpath, document, null, XPathResult.ANY_TYPE, null);
+      const nodes: Node[] = [];
+      let node;
+      while ((node = result.iterateNext())) {
+        nodes.push(node);
+      }
+      return nodes.length;
+    }, errorMessage);
+
+    console.log(`Error elements count: ${errorElementsCount}`);
+    accountExists = errorElementsCount === 0;
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      console.error(`Error checking email: ${err.message}`);
+    } else {
+      console.error('An unknown error occurred');
+    }
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
   }
-  
+
+  return accountExists;
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -130,6 +143,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Missing email parameter" }, { status: 400 });
   }
 
+  console.log(`Checking email: ${email}`);
   const accountExists = await checkEmailExists(email);
 
   return NextResponse.json({ account_exists: accountExists }, { status: 200 });
