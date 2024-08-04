@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import puppeteer from "puppeteer-core";
+import puppeteer, { Browser } from "puppeteer-core";
 import chromium from "@sparticuz/chromium-min";
 import dns from 'dns';
 import { promisify } from 'util';
@@ -38,7 +38,7 @@ const platformSelectors: Record<string, { input: string; nextButton: string; err
 };
 
 async function checkEmailExists(email: string): Promise<boolean> {
-  let browser: puppeteer.Browser | null = null;
+  let browser: Browser | null = null;
   let accountExists = false;
 
   try {
@@ -49,7 +49,7 @@ async function checkEmailExists(email: string): Promise<boolean> {
     }
 
     const mailServer = mxRecords[0].exchange;
-    let platform = '';
+    let platform: keyof typeof platformUrls = '';
 
     if (mailServer.includes('outlook')) {
       platform = 'outlook';
@@ -76,8 +76,7 @@ async function checkEmailExists(email: string): Promise<boolean> {
       executablePath: isDev
         ? localExecutablePath
         : await chromium.executablePath(remoteExecutablePath),
-      // headless: true, // Ensure headless mode is enabled
-      headless: false ,
+      headless: false, // Set to true for production, false for debugging
       debuggingPort: isDev ? 9222 : undefined,
     });
 
@@ -94,11 +93,11 @@ async function checkEmailExists(email: string): Promise<boolean> {
     await page.waitForSelector(nextButton);
     await page.click(nextButton);
 
-    await new Promise((resolve) => setTimeout(resolve, 4000)); // Replace page.waitForTimeout(3000)
+    await new Promise((resolve) => setTimeout(resolve, 4000)); // Wait for the response
 
-    const errorElements = await page.evaluate((xpath) => {
+    const errorElementsCount = await page.evaluate((xpath) => {
       const result = document.evaluate(xpath, document, null, XPathResult.ANY_TYPE, null);
-      const nodes = [];
+      const nodes: Node[] = [];
       let node;
       while ((node = result.iterateNext())) {
         nodes.push(node);
@@ -106,9 +105,9 @@ async function checkEmailExists(email: string): Promise<boolean> {
       return nodes.length;
     }, errorMessage);
 
-    accountExists = errorElements === 0;
+    accountExists = errorElementsCount === 0;
   } catch (err) {
-    console.log(`Error checking email: ${err.message}`);
+    console.error(`Error checking email: ${err.message}`);
   } finally {
     if (browser) {
       await browser.close();
