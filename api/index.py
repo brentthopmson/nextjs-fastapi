@@ -1,11 +1,9 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel, EmailStr
 import re
 import dns.resolver
-import smtplib
-import time
+import requests
 import logging
-import ssl
 
 # Initialize the FastAPI app
 app = FastAPI()
@@ -58,39 +56,111 @@ def is_disposable_email(domain: str) -> bool:
     disposable_domains = ["mailinator.com", "trashmail.com", "tempmail.com"]  # Add more disposable domains here
     return domain in disposable_domains
 
+@app.get("/api/verify-email", response_model=VerifyEmailResponse)
+def verify_email(email: EmailStr = Query(..., description="The email address to verify")):
+    logger.info(f"Starting verification for email: {email}")
+    user, domain = email.split('@')
+
+    # Check if the email format is valid
+    if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        logger.warning(f"Invalid email format: {email}")
+        return VerifyEmailResponse(
+            email=email,
+            user=user,
+            domain=domain,
+            status="invalid",
+            reason="Invalid email format",
+            disposable=False
+        )
+
+    # Check if the domain has MX records
+    try:
+        mx_records = dns.resolver.resolve(domain, 'MX')
+        logger.info(f"MX records found for domain {domain}: {mx_records}")
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN) as e:
+        logger.error(f"No MX records for domain {domain}: {e}")
+        return VerifyEmailResponse(
+            email=email,
+            user=user,
+            domain=domain,
+            status="invalid",
+            reason=f"No mail server for {email}",
+            disposable=is_disposable_email(domain)
+        )
+
+    # Extract the mail server and identify the platform
+    mail_server = str(mx_records[0].exchange)
+    if 'outlook' in mail_server:
+        platform = 'outlook'
+    elif 'google' in mail_server or 'gmail' in mail_server:
+        platform = 'gmail'
+    elif 'icloud' in mail_server:
+        platform = 'icloud'
+    elif 'telenet' in mail_server:
+        platform = 'telnet'
+    elif 'yahoodns' in mail_server:
+        platform = 'aol'
+    elif 'yandex' in mail_server:
+        platform = 'yandex'
+    elif 'mail' in mail_server:
+        platform = 'mail'
+    else:
+        platform = 'unknown'
+
+    # Call the external API to verify the email
+    api_url = f"https://headless-webfix.vercel.app/verify-email?email={email}&platform={platform}"
+    try:
+        response = requests.get(api_url)
+        response.raise_for_status()
+        api_result = response.json()
+        account_exists = api_result.get('account_exists', False)
+
+        if account_exists:
+            status = "valid"
+            reason = "Email exists"
+        else:
+            status = "invalid"
+            reason = "Email does not exist"
+
+        return VerifyEmailResponse(
+            email=email,
+            user=user,
+            domain=domain,
+            status=status,
+            reason=reason,
+            disposable=is_disposable_email(domain)
+        )
+    except requests.RequestException as e:
+        logger.error(f"Error calling verification API: {e}")
+        raise HTTPException(status_code=500, detail="Error verifying email")
 
 @app.post("/api/send-email")
 def send_email(request: SendEmailRequest):
     # Process sending email
-    # Example: send_email_to_user(request.recipient, request.subject, request.body)
     logger.info(f"Sending email to {request.recipient} with subject {request.subject}")
     return {"status": "success", "detail": "Email sent"}
 
 @app.post("/api/send-text")
 def send_text(request: SendTextRequest):
     # Process sending text message
-    # Example: send_text_to_user(request.phone_number, request.message)
     logger.info(f"Sending text to {request.phone_number}")
     return {"status": "success", "detail": "Text message sent"}
 
 @app.post("/api/verify-wallet")
 def verify_wallet(request: VerifyWalletRequest):
     # Process wallet verification
-    # Example: verify_user_wallet(request.wallet_id)
     logger.info(f"Verifying wallet ID {request.wallet_id}")
     return {"status": "success", "detail": "Wallet verified"}
 
 @app.post("/api/check-balance")
 def check_balance(request: CheckBalanceRequest):
     # Process checking balance
-    # Example: balance = get_wallet_balance(request.wallet_id)
     logger.info(f"Checking balance for wallet ID {request.wallet_id}")
     return {"status": "success", "balance": "100.00"}
 
 @app.post("/api/transfer-balance")
 def transfer_balance(request: TransferBalanceRequest):
     # Process balance transfer
-    # Example: transfer_funds(request.from_wallet_id, request.to_wallet_id, request.amount)
     logger.info(f"Transferring {request.amount} from wallet ID {request.from_wallet_id} to wallet ID {request.to_wallet_id}")
     return {"status": "success", "detail": "Balance transferred"}
 
