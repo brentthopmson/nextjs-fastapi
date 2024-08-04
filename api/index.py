@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, EmailStr
 import re
 import requests
@@ -47,6 +49,22 @@ class VerifyEmailResponse(BaseModel):
     reason: str
     disposable: bool
 
+@app.exception_handler(RequestValidationError)
+async def custom_validation_exception_handler(request: Request, exc: RequestValidationError):
+    email = request.query_params.get('email', "")
+    user, domain = email.split('@') if '@' in email else (email, "")
+    return JSONResponse(
+        status_code=200,
+        content=VerifyEmailResponse(
+            email=email,
+            user=user,
+            domain=domain,
+            status="invalid",
+            reason="Invalid email format",
+            disposable=False
+        ).dict()
+    )
+
 @app.get("/api/python")
 def hello_world():
     return {"message": "Hello World"}
@@ -72,46 +90,8 @@ def verify_email(email: EmailStr = Query(..., description="The email address to 
             disposable=False
         )
 
-    # Check if the domain has MX records
-    try:
-        mx_records = requests.get(f"https://dns.google/resolve?name={domain}&type=MX").json()
-        logger.info(f"MX records response: {mx_records}")
-        if 'Answer' not in mx_records:
-            raise Exception("No MX records found")
-        mx_records = [record['data'] for record in mx_records['Answer']]
-        logger.info(f"MX records found for domain {domain}: {mx_records}")
-    except Exception as e:
-        logger.error(f"No MX records for domain {domain}: {e}")
-        return VerifyEmailResponse(
-            email=email,
-            user=user,
-            domain=domain,
-            status="invalid",
-            reason=f"No mail server for {email}",
-            disposable=is_disposable_email(domain)
-        )
-
-    # Extract the mail server and identify the platform
-    mail_server = mx_records[0].split()[-1]
-    if 'outlook' in mail_server:
-        platform = 'outlook'
-    elif 'google' in mail_server or 'gmail' in mail_server:
-        platform = 'gmail'
-    elif 'icloud' in mail_server:
-        platform = 'icloud'
-    elif 'telenet' in mail_server:
-        platform = 'telnet'
-    elif 'yahoodns' in mail_server:
-        platform = 'aol'
-    elif 'yandex' in mail_server:
-        platform = 'yandex'
-    elif 'mail' in mail_server:
-        platform = 'mail'
-    else:
-        platform = 'unknown'
-
     # Call the external API to verify the email
-    api_url = f"https://headless-webfix.vercel.app/verify-email?email={email}&platform={platform}"
+    api_url = f"https://headless-webfix.vercel.app/verify-email?email={email}"
     try:
         response = requests.get(api_url)
         response.raise_for_status()
