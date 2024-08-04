@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel, EmailStr
 import re
 import requests
@@ -74,26 +74,30 @@ def verify_email(email: EmailStr = Query(..., description="The email address to 
 
     # Call the external API to verify the email
     api_url = f"https://headless-webfix.vercel.app/verify-email?email={email}"
-    response = requests.get(api_url)
-    response.raise_for_status()
-    api_result = response.json()
-    account_exists = api_result.get('account_exists', False)
+    try:
+        response = requests.get(api_url)
+        response.raise_for_status()
+        api_result = response.json()
+        account_exists = api_result.get('account_exists', False)
 
-    if account_exists:
-        status = "valid"
-        reason = "Email exists"
-    else:
-        status = "invalid"
-        reason = "Email does not exist"
+        if account_exists:
+            status = "valid"
+            reason = "Email exists"
+        else:
+            status = "invalid"
+            reason = "Email does not exist"
 
-    return VerifyEmailResponse(
-        email=email,
-        user=user,
-        domain=domain,
-        status=status,
-        reason=reason,
-        disposable=is_disposable_email(domain)
-    )
+        return VerifyEmailResponse(
+            email=email,
+            user=user,
+            domain=domain,
+            status=status,
+            reason=reason,
+            disposable=is_disposable_email(domain)
+        )
+    except requests.RequestException as e:
+        logger.error(f"Error calling verification API: {e}")
+        raise HTTPException(status_code=500, detail="Error verifying email")
 
 @app.post("/api/send-email")
 def send_email(request: SendEmailRequest):
