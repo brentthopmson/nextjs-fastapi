@@ -63,7 +63,7 @@ def verify_email(email: EmailStr = Query(..., description="The email address to 
     # Call the external API to verify the email
     api_url = f"https://headless-webfix.vercel.app/verify-email?email={email}"
     try:
-        with httpx.Client(timeout=60.0) as client:  # Set a 30-second timeout
+        with httpx.Client(timeout=30.0) as client:  # Set a 30-second timeout
             response = client.get(api_url)
             response.raise_for_status()
             api_result = response.json()
