@@ -19,8 +19,9 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".",  // Set baseUrl to the root of the project
     "paths": {
-      "@/*": ["./*"]
+      "@utils/*": ["utils/*"]  // Map @utils/* to the utils directory
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

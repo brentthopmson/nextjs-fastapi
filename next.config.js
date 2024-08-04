@@ -28,6 +28,25 @@ const nextConfig = {
   images: {
     domains: ['cdn.debounce.io'], // Add the domain(s) here
   },
+  experimental: {
+    serverComponentsExternalPackages: ['puppeteer-core', '@sparticuz/chromium-min'],
+  },
+  webpack(config, { isServer }) {
+    if (isServer) {
+      // Handle modern JavaScript features for Puppeteer
+      config.module.rules.push({
+        test: /\.js$/,
+        include: /node_modules\/puppeteer-core/,
+        use: {
+          loader: 'babel-loader',
+          options: {
+            presets: ['@babel/preset-env'],
+          },
+        },
+      });
+    }
+    return config;
+  },
 };
 
 module.exports = nextConfig;
