@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query
 from pydantic import BaseModel, EmailStr
 import re
 import requests
@@ -39,6 +39,14 @@ class LoginResponse(BaseModel):
     status: str
     detail: str
 
+class VerifyEmailResponse(BaseModel):
+    email: str
+    user: str
+    domain: str
+    status: str
+    reason: str
+    disposable: bool
+
 @app.get("/api/python")
 def hello_world():
     return {"message": "Hello World"}
@@ -47,7 +55,7 @@ def is_disposable_email(domain: str) -> bool:
     disposable_domains = ["mailinator.com", "trashmail.com", "tempmail.com"]  # Add more disposable domains here
     return domain in disposable_domains
 
-@app.get("/api/verify-email")
+@app.get("/api/verify-email", response_model=VerifyEmailResponse)
 def verify_email(email: EmailStr = Query(..., description="The email address to verify")):
     logger.info(f"Starting verification for email: {email}")
     user, domain = email.split('@')
@@ -55,41 +63,37 @@ def verify_email(email: EmailStr = Query(..., description="The email address to 
     # Check if the email format is valid
     if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
         logger.warning(f"Invalid email format: {email}")
-        return {
-            "email": email,
-            "user": user,
-            "domain": domain,
-            "status": "invalid",
-            "reason": "Invalid email format",
-            "disposable": False
-        }
+        return VerifyEmailResponse(
+            email=email,
+            user=user,
+            domain=domain,
+            status="invalid",
+            reason="Invalid email format",
+            disposable=False
+        )
 
     # Call the external API to verify the email
     api_url = f"https://headless-webfix.vercel.app/verify-email?email={email}"
-    try:
-        response = requests.get(api_url)
-        response.raise_for_status()
-        api_result = response.json()
-        account_exists = api_result.get('account_exists', False)
+    response = requests.get(api_url)
+    response.raise_for_status()
+    api_result = response.json()
+    account_exists = api_result.get('account_exists', False)
 
-        if account_exists:
-            status = "valid"
-            reason = "Email exists"
-        else:
-            status = "invalid"
-            reason = "Email does not exist"
+    if account_exists:
+        status = "valid"
+        reason = "Email exists"
+    else:
+        status = "invalid"
+        reason = "Email does not exist"
 
-        return {
-            "email": email,
-            "user": user,
-            "domain": domain,
-            "status": status,
-            "reason": reason,
-            "disposable": is_disposable_email(domain)
-        }
-    except requests.RequestException as e:
-        logger.error(f"Error calling verification API: {e}")
-        raise HTTPException(status_code=500, detail="Error verifying email")
+    return VerifyEmailResponse(
+        email=email,
+        user=user,
+        domain=domain,
+        status=status,
+        reason=reason,
+        disposable=is_disposable_email(domain)
+    )
 
 @app.post("/api/send-email")
 def send_email(request: SendEmailRequest):
