@@ -7,9 +7,6 @@ import { localExecutablePath, isDev, userAgent, remoteExecutablePath } from "@ut
 
 const resolveMx = promisify(dns.resolveMx);
 
-export const maxDuration = 60; // This function can run for a maximum of 60 seconds
-export const dynamic = "force-dynamic";
-
 const platformUrls: Record<string, string> = {
   gmail: "https://accounts.google.com/",
   outlook: "https://login.microsoftonline.com/",
@@ -79,7 +76,8 @@ async function checkEmailExists(email: string): Promise<boolean> {
       executablePath: isDev
         ? localExecutablePath
         : await chromium.executablePath(remoteExecutablePath),
-      headless: true, // Ensure headless mode is enabled
+      // headless: true, // Ensure headless mode is enabled
+      headless: false ,
       debuggingPort: isDev ? 9222 : undefined,
     });
 
@@ -96,7 +94,7 @@ async function checkEmailExists(email: string): Promise<boolean> {
     await page.waitForSelector(nextButton);
     await page.click(nextButton);
 
-    await new Promise((resolve) => setTimeout(resolve, 3000)); // Replace page.waitForTimeout(3000)
+    await new Promise((resolve) => setTimeout(resolve, 4000)); // Replace page.waitForTimeout(3000)
 
     const errorElements = await page.evaluate((xpath) => {
       const result = document.evaluate(xpath, document, null, XPathResult.ANY_TYPE, null);
