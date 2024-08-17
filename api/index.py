@@ -31,4 +31,4 @@ async def periodic_verification():
             logger.info(f"Checking sheet: {sheet_name}")
             await verify_emails(sheet_name, get_sheet_data, update_sheet_data, delete_sheet_rows)
         logger.info("Completed periodic verification cycle")
-        await asyncio.sleep(3600)  # Run every hour
+        await asyncio.sleep(60)  # Run every hour
